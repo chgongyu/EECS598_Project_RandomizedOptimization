@@ -12,13 +12,13 @@ from sqrt_hessian import logis_sketched_hessian_sqrt
 import torch
 
 
-def line_search(w, v, g, loss, X, Y, alpha=0.3, beta=0.8):
+def line_search(w, v, g, loss, X, Y, a=0.1, b=0.5):
     delta = (v * g).sum()
     loss_x = loss(w, X, Y)
     s = 1
     ws = w + s * v
-    while loss(ws, X, Y,) > loss_x + alpha * s * delta:
-        s = beta * s
+    while loss(ws, X, Y,) > loss_x + a * s * delta:
+        s = b * s
         ws = w + s * v
     return s
 
@@ -107,6 +107,7 @@ def NS(w, loss, gradient, Hv=None, hessian=None, X=None, Y=None, opt=None, **kwa
         # Basics
     sketch_size = opt.get('sketch_size', int(np.sqrt(X.shape[0])))
     sketch_type = opt.get('sketch_type', sparse_rademacher)
+    alpha = opt.get('alpha', 1e-3)
 
     grad_tol = opt.get('grad_tol', 1e-6)
     n_iterations = opt.get('n_iterations', 100)
@@ -134,9 +135,11 @@ def NS(w, loss, gradient, Hv=None, hessian=None, X=None, Y=None, opt=None, **kwa
 
         #### I: Sketching #####
         B = logis_sketched_hessian_sqrt(X, w)
+
         sqrt_hessian = sketch_type(B, sketch_size)
 
-        # S = gen_sketch_mat(sketch_size, n, 'Rademacher')
+        # S = gen_sketch_mat(sketch_size, n, 'Gaussian')
+        # S = np.eye(n)
         # sqrt_hessian = S @ B
 
         #### II: Step computation #####
@@ -147,8 +150,12 @@ def NS(w, loss, gradient, Hv=None, hessian=None, X=None, Y=None, opt=None, **kwa
             break
 
         # b) call subproblem solver
-        hessian = sqrt_hessian.T.dot(sqrt_hessian)
-        v = np.linalg.lstsq(hessian, -grad)[0]
+        H = sqrt_hessian.T @ sqrt_hessian + alpha*np.eye(d)
+        # hessian = H + opt['alpha'] * np.eye(d)
+        # H = hessian(w, X, Y, **kwargs)
+
+        # print(f'{np.linalg.norm(H+ alpha * np.eye(d) - H)}')
+        v = - np.linalg.solve(H, grad)
         mu = line_search(w, v, grad, loss, X, Y)
 
         s = mu * v
