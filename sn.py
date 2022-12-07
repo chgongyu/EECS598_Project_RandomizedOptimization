@@ -7,11 +7,12 @@
 from math import sqrt, ceil, log, isnan
 from datetime import datetime
 import numpy as np
+from sketches import gaussian, srht, less, sparse_rademacher, rrs, lvrg_sampling, sqrn_sampling
+from sqrt_hessian import logis_sketched_hessian_sqrt
 
-
-def SN(w, loss, gradient, Hv=None, hessian=None, X=None, Y=None, opt=None, **kwargs):
+def SkCR(w, loss, gradient, Hv=None, hessian=None, X=None, Y=None, opt=None, **kwargs):
     """
-    Minimize a continous, unconstrained function using the Subsampled Newton's method.
+    Minimize a continous, unconstrained function using the Sketched cubic regularization.
 
     References
     ----------
@@ -37,7 +38,7 @@ def SN(w, loss, gradient, Hv=None, hessian=None, X=None, Y=None, opt=None, **kwa
     opt : dictionary, optional
         optional arguments passed to ARC
     """
-    print('--- Subsampled Cubic Regularization ---\n')
+    print('--- Sketched Cubic Regularization ---\n')
 
     ### Set Parameters ###
 
@@ -49,6 +50,10 @@ def SN(w, loss, gradient, Hv=None, hessian=None, X=None, Y=None, opt=None, **kwa
         d = X.shape[1]
 
         # Basics
+    sketch_size = opt.get('sketch_size', int(np.sqrt(X.shape[0])))
+    sketch_type = opt.get('sketch_type_SkCR', sparse_rademacher)
+    alpha = opt.get('alpha', 1e-3)
+
     eta_1 = opt.get('success_treshold', 0.1)
     eta_2 = opt.get('very_success_treshold', 0.9)
     gamma_1 = opt.get('penalty_increase_multiplier', 2.)
@@ -60,7 +65,7 @@ def SN(w, loss, gradient, Hv=None, hessian=None, X=None, Y=None, opt=None, **kwa
     n_iterations = opt.get('n_iterations', 100)
 
     # Subproblem
-    subproblem_solver = opt.get('subproblem_solver_SCR', 'cauchy_point')
+    subproblem_solver = opt.get('subproblem_solver_SkCR', 'exact')
     solve_each_i_th_krylov_space = opt.get('solve_each_i-th_krylov_space', 1)
     krylov_tol = opt.get('krylov_tol', 1e-1)
     exact_tol = opt.get('exact_tol', 1e-1)
@@ -69,6 +74,7 @@ def SN(w, loss, gradient, Hv=None, hessian=None, X=None, Y=None, opt=None, **kwa
     # Sampling
     Hessian_sampling_flag = opt.get('Hessian_sampling', False)
     gradient_sampling_flag = opt.get('gradient_sampling', False)
+
 
     if gradient_sampling_flag == True or Hessian_sampling_flag == True:
         assert (
@@ -116,91 +122,84 @@ def SN(w, loss, gradient, Hv=None, hessian=None, X=None, Y=None, opt=None, **kwa
 
     for i in range(n_iterations):
 
-        #### I: Subsampling #####
+        #### I: Sketching #####
         ## a) determine batchsize ##
-        if sampling_scheme == 'exponential':
-            sample_size_Hessian = Hessian_sampling_flag * (
-                        int(min(n, n * initial_sample_size_Hessian + exp_growth_constant ** (i + 1))) + 1) + (
-                                              1 - Hessian_sampling_flag) * n
-            sample_size_gradient = gradient_sampling_flag * (
-                        int(min(n, n * initial_sample_size_gradient + exp_growth_constant ** (i + 1))) + 1) + (
-                                               1 - gradient_sampling_flag) * n
+        if sampling_scheme=='exponential':
+            sample_size_Hessian = Hessian_sampling_flag*(int(min(n, n*initial_sample_size_Hessian + exp_growth_constant**(i+1)))+1) + (1-Hessian_sampling_flag)*n
+            # sample_size_gradient= gradient_sampling_flag*(int(min(n, n*initial_sample_size_gradient + exp_growth_constant**(i+1)))+1) + (1-gradient_sampling_flag)*n
 
-        elif sampling_scheme == 'linear':
-            sample_size_Hessian = Hessian_sampling_flag * int(
-                min(n, max(n * initial_sample_size_Hessian, n / n_iterations * (i + 1)))) + (
-                                              1 - Hessian_sampling_flag) * n
-            sample_size_gradient = gradient_sampling_flag * int(
-                min(n, max(n * initial_sample_size_gradient, n / n_iterations * (i + 1)))) + (
-                                               1 - gradient_sampling_flag) * n
+        elif sampling_scheme=='linear':
+            sample_size_Hessian = Hessian_sampling_flag*int(min(n, max(n*initial_sample_size_Hessian, n/n_iterations*(i+1))))+(1-Hessian_sampling_flag)*n
+            # sample_size_gradient= gradient_sampling_flag*int(min(n, max(n*initial_sample_size_gradient, n/n_iterations*(i+1))))+(1-gradient_sampling_flag)*n
 
-        elif sampling_scheme == 'adaptive':
-            if i == 0:
-                sample_size_Hessian = Hessian_sampling_flag * int(initial_sample_size_Hessian * n) + (
-                            1 - Hessian_sampling_flag) * n
-                sample_size_gradient = gradient_sampling_flag * int(initial_sample_size_gradient * n) + (
-                            1 - gradient_sampling_flag) * n
+        elif sampling_scheme=='adaptive':
+            if i==0:
+                sample_size_Hessian=Hessian_sampling_flag*int(initial_sample_size_Hessian*n)+(1-Hessian_sampling_flag)*n
+                # sample_size_gradient=gradient_sampling_flag*int(initial_sample_size_gradient*n)+(1-gradient_sampling_flag)*n
             else:
-                # adjust sampling constant c such that the first step would have given a sample size of initial_sample_size
-                if i == 1:
-                    c_Hessian = (initial_sample_size_Hessian * n * sn ** 2) / log(d)
-                    c_gradient = (initial_sample_size_gradient * n * sn ** 4) / log(d)
-                if successful_flag == False:
-                    sample_size_Hessian = Hessian_sampling_flag * min(n,
-                                                                      int(sample_size_Hessian * unsuccessful_sample_scaling)) + (
-                                                      1 - Hessian_sampling_flag) * n
-                    sample_size_gradient = gradient_sampling_flag * min(n,
-                                                                        int(sample_size_gradient * unsuccessful_sample_scaling)) + (
-                                                       1 - gradient_sampling_flag) * n
+                #adjust sampling constant c such that the first step would have given a sample size of initial_sample_size
+                if i==1:
+                    c_Hessian=(initial_sample_size_Hessian*n*sn**2)/log(d)
+                    # c_gradient=(initial_sample_size_gradient*n*sn**4)/log(d)
+                if successful_flag==False:
+                    sample_size_Hessian=Hessian_sampling_flag*min(n,int(sample_size_Hessian*unsuccessful_sample_scaling)) + (1-Hessian_sampling_flag)*n
+                    # sample_size_gradient=gradient_sampling_flag*min(n,int(sample_size_gradient*unsuccessful_sample_scaling)) +(1-gradient_sampling_flag)*n
                 else:
-                    sample_size_Hessian = Hessian_sampling_flag * min(n, int(max(
-                        (c_Hessian * log(d) / (sn ** 2) * sample_scaling_Hessian),
-                        initial_sample_size_Hessian * n))) + (1 - Hessian_sampling_flag) * n
-                    sample_size_gradient = gradient_sampling_flag * min(n, int(max(
-                        (c_gradient * log(d) / (sn ** 4) * sample_scaling_gradient),
-                        initial_sample_size_gradient * n))) + (1 - gradient_sampling_flag) * n
+                    sample_size_Hessian=Hessian_sampling_flag*min(n,int(max((c_Hessian*log(d)/(sn**2)*sample_scaling_Hessian),initial_sample_size_Hessian*n))) + (1-Hessian_sampling_flag)*n
+                    # sample_size_gradient=gradient_sampling_flag*min(n,int(max((c_gradient*log(d)/(sn**4)*sample_scaling_gradient),initial_sample_size_gradient*n))) + (1-gradient_sampling_flag)*n
         else:
-            sample_size_Hessian = n
-            sample_size_gradient = n
+            sample_size_Hessian=n
+            # sample_size_gradient=n
 
         ## b) draw batches ##
-        if sample_size_Hessian < n:
-            int_idx_Hessian = np.random.randint(0, high=n, size=sample_size_Hessian)
+        # if sample_size_Hessian <n:
+        #     int_idx_Hessian=np.random.randint(0, high=n, size=sample_size_Hessian)
+        #
+        #     bool_idx_Hessian = np.zeros(n,dtype=bool)
+        #     bool_idx_Hessian[int_idx_Hessian]=True
+        #     _X=np.zeros((sample_size_Hessian,d))
+        #     _X=np.compress(bool_idx_Hessian,X,axis=0)
+        #     _Y=np.compress(bool_idx_Hessian,Y,axis=0)
+        #
+        # else:
+        #     _X=X
+        #     _Y=Y
 
-            bool_idx_Hessian = np.zeros(n, dtype=bool)
-            bool_idx_Hessian[int_idx_Hessian] = True
-            _X = np.zeros((sample_size_Hessian, d))
-            _X = np.compress(bool_idx_Hessian, X, axis=0)
-            _Y = np.compress(bool_idx_Hessian, Y, axis=0)
+        # if sample_size_gradient < n:
+        #     int_idx_gradient=np.random.randint(0, high=n, size=sample_size_gradient)
+        #     bool_idx_gradient = np.zeros(n,dtype=bool)
+        #     bool_idx_gradient[int_idx_gradient]=True
+        #     _X2=np.zeros((sample_size_gradient,d))
+        #     _X2=np.compress(bool_idx_gradient,X,axis=0)
+        #     _Y2=np.compress(bool_idx_gradient,Y,axis=0)
+        #
+        # else:
+        #     _X2=X
+        #     _Y2=Y
 
-        else:
-            _X = X
-            _Y = Y
+        # n_samples_per_step=sample_size_Hessian+sample_size_gradient
 
-        if sample_size_gradient < n:
-            int_idx_gradient = np.random.randint(0, high=n, size=sample_size_gradient)
-            bool_idx_gradient = np.zeros(n, dtype=bool)
-            bool_idx_gradient[int_idx_gradient] = True
-            _X2 = np.zeros((sample_size_gradient, d))
-            _X2 = np.compress(bool_idx_gradient, X, axis=0)
-            _Y2 = np.compress(bool_idx_gradient, Y, axis=0)
+        sketch_size = sample_size_Hessian
+        B = logis_sketched_hessian_sqrt(X, w)
+        sqrt_hessian = sketch_type(B, sketch_size)
 
-        else:
-            _X2 = X
-            _Y2 = Y
 
-        n_samples_per_step = sample_size_Hessian + sample_size_gradient
+        # S = gen_sketch_mat(sketch_size, n, 'Gaussian')
+        # S = np.eye(n)
+        # sqrt_hessian = S @ B
 
         #### II: Step computation #####
         # a) recompute gradient either because of accepted step or because of re-sampling
-        if gradient_sampling_flag == True or successful_flag == True:
-            grad = gradient(w, _X2, _Y2, **kwargs)
-            grad_norm = np.linalg.norm(grad)
-            if grad_norm < grad_tol:
-                break
+        grad = gradient(w, X, Y, **kwargs)
+        grad_norm = np.linalg.norm(grad)
+        if grad_norm < grad_tol:
+            break
 
         # b) call subproblem solver
-        (s, lambda_k) = solve_ARC_subproblem(grad, Hv, hessian, sigma, _X, _Y, w, successful_flag, lambda_k,
+        H = sqrt_hessian.T @ sqrt_hessian + alpha * np.eye(d)
+
+        # b) call subproblem solver
+        (s, lambda_k) = solve_ARC_subproblem(grad, H, sigma, X, Y, w, successful_flag, lambda_k,
                                              subproblem_solver,
                                              exact_tol, krylov_tol, solve_each_i_th_krylov_space,
                                              keep_Q_matrix_in_memory, **kwargs)
@@ -211,11 +210,11 @@ def SN(w, loss, gradient, Hv=None, hessian=None, X=None, Y=None, opt=None, **kwa
         current_f = loss(w + s, X, Y, **kwargs)
 
         function_decrease = previous_f - current_f
-        Hs = Hv(w, _X, _Y, s, **kwargs)
+        Hs = Hv(w, X, Y, s, **kwargs)
         model_decrease = -(np.dot(grad, s) + 0.5 * np.dot(s, Hs) + 1 / 3 * sigma * sn ** 3)
 
         rho = function_decrease / model_decrease
-        assert (model_decrease >= 0), 'negative model decrease. This should not have happened'
+        # assert (model_decrease >= 0), 'negative model decrease. This should not have happened'
 
         # Update w if step s is successful
         if rho >= eta_1:
@@ -225,7 +224,7 @@ def SN(w, loss, gradient, Hv=None, hessian=None, X=None, Y=None, opt=None, **kwa
         else:
             _loss = previous_f
 
-        n_samples_seen += n_samples_per_step
+        # n_samples_seen += n_samples_per_step
 
         # Update penalty parameter
         if rho >= eta_2:
@@ -241,8 +240,12 @@ def SN(w, loss, gradient, Hv=None, hessian=None, X=None, Y=None, opt=None, **kwa
         _timing = timing
         timing = (datetime.now() - start).total_seconds()
         print('Iteration ' + str(i) + ': loss = ' + str(_loss) + ' norm_grad = ' + str(
-            grad_norm), 'time= ', round(timing - _timing, 3), 'penalty=', sigma, 'stepnorm=', sn, 'Samples Hessian=',
-              sample_size_Hessian, 'samples Gradient=', sample_size_gradient, "\n")
+            grad_norm), 'time= ', round(timing - _timing, 3),
+              # 'penalty=', sigma,
+              'stepnorm=', sn,
+              # 'Samples Hessian=',
+              # sample_size_Hessian, 'samples Gradient=', sample_size_gradient, "\n"
+              )
 
         timings_collector.append(timing)
         samples_collector.append(n_samples_seen)
@@ -252,120 +255,129 @@ def SN(w, loss, gradient, Hv=None, hessian=None, X=None, Y=None, opt=None, **kwa
         k += 1
     return w, timings_collector, loss_collector, samples_collector
 
+def Lvrg(w, loss, gradient, Hv=None, hessian=None, X=None, Y=None, opt=None, **kwargs):
+    opt['sketch_type_SkCR'] = lvrg_sampling
+    return SkCR(w, loss, gradient,
+            Hv, hessian, X=X, Y=Y, opt=opt, **kwargs)
 
-def solve_ARC_subproblem(grad, Hv, hessian, sigma, X, Y, w, successful_flag, lambda_k, subproblem_solver, exact_tol,
+def Sqrn(w, loss, gradient, Hv=None, hessian=None, X=None, Y=None, opt=None, **kwargs):
+    opt['sketch_type_SkCR'] = sqrn_sampling
+    return SkCR(w, loss, gradient,
+            Hv, hessian, X=X, Y=Y, opt=opt, **kwargs)
+
+def solve_ARC_subproblem(grad, H, sigma, X, Y, w, successful_flag, lambda_k, subproblem_solver, exact_tol,
                          krylov_tol, solve_each_i_th_krylov_space, keep_Q_matrix_in_memory, **kwargs):
-    if subproblem_solver == 'cauchy_point':
-        # min m(-a*grad) leads to finding the root of a quadratic polynominal
+    # if subproblem_solver == 'cauchy_point':
+    #     # min m(-a*grad) leads to finding the root of a quadratic polynominal
+    #
+    #     Hg = Hv(w, X, Y, grad, **kwargs)
+    #     gHg = np.dot(grad, Hg)
+    #     a = sigma * np.linalg.norm(grad) ** 3
+    #     b = gHg
+    #     c = -np.dot(grad, grad)
+    #     (alpha_l, alpha_h) = mitternachtsformel(a, b, c)
+    #     alpha = alpha_h
+    #     s = -alpha * grad
 
-        Hg = Hv(w, X, Y, grad, **kwargs)
-        gHg = np.dot(grad, Hg)
-        a = sigma * np.linalg.norm(grad) ** 3
-        b = gHg
-        c = -np.dot(grad, grad)
-        (alpha_l, alpha_h) = mitternachtsformel(a, b, c)
-        alpha = alpha_h
-        s = -alpha * grad
+        # return (s, 0)
 
-        return (s, 0)
-
-    elif subproblem_solver == 'exact':
-        H = hessian(w, X, Y, **kwargs)
+    if subproblem_solver == 'exact':
+        # H = hessian(w, X, Y, **kwargs)
         (s, lambda_k) = exact_ARC_suproblem_solver(grad, H, sigma, exact_tol, successful_flag, lambda_k)
 
         return (s, lambda_k)
 
-    elif subproblem_solver == 'lanczos':
-        y = grad
-        grad_norm = np.linalg.norm(grad)
-        gamma_k_next = grad_norm
-        delta = []
-        gamma = []  # save for cheaper reconstruction of Q
-
-        dimensionality = len(w)
-        if keep_Q_matrix_in_memory:
-            q_list = []
-
-        k = 0
-        T = np.zeros((1, 1))  # Building up tri-diagonal matrix T
-
-        while True:
-            if gamma_k_next == 0:  # From T 7.5.16 u_k was the minimizer of m_k. But it was not accepted. Thus we have to be in the hard case.
-                H = hessian(w, X, Y, **kwargs)
-                (s, lambda_k) = exact_ARC_suproblem_solver(grad, H, sigma, exact_tol, successful_flag, lambda_k)
-                return (s, lambda_k)
-
-            # a) create g
-            e_1 = np.zeros(k + 1)
-            e_1[0] = 1.0
-            g_lanczos = grad_norm * e_1
-            # b) generate H
-            gamma_k = gamma_k_next
-            gamma.append(gamma_k)
-
-            if not k == 0:
-                q_old = q
-            q = y / gamma_k
-
-            if keep_Q_matrix_in_memory:
-                q_list.append(q)
-
-            Hq = Hv(w, X, Y, q, **kwargs)  # matrix free
-            delta_k = np.dot(q, Hq)
-            delta.append(delta_k)
-            T_new = np.zeros((k + 1, k + 1))
-            if k == 0:
-                T[k, k] = delta_k
-                y = Hq - delta_k * q
-            else:
-                T_new[0:k, 0:k] = T
-                T_new[k, k] = delta_k
-                T_new[k - 1, k] = gamma_k
-                T_new[k, k - 1] = gamma_k
-                T = T_new
-                y = Hq - delta_k * q - gamma_k * q_old
-
-            gamma_k_next = np.linalg.norm(y)
-            #### Solve Subproblem only in each i-th Krylov space
-            if k % (solve_each_i_th_krylov_space) == 0 or (k == dimensionality - 1) or gamma_k_next == 0:
-                (u, lambda_k) = exact_ARC_suproblem_solver(g_lanczos, T, sigma, exact_tol, successful_flag, lambda_k)
-                e_k = np.zeros(k + 1)
-                e_k[k] = 1.0
-                if np.linalg.norm(y) * abs(np.dot(u, e_k)) < min(krylov_tol,
-                                                                 np.linalg.norm(u) / max(1, sigma)) * grad_norm:
-                    break
-
-            if k == dimensionality - 1:
-                print('Krylov dimensionality reach full space!')
-                break
-
-            successful_flag = False
-
-            k = k + 1
-
-        # Recover Q to compute s
-        n = np.size(grad)
-        Q = np.zeros((k + 1, n))  # <--------- since numpy is ROW MAJOR its faster to fill the transpose of Q
-        y = grad
-
-        for j in range(0, k + 1):
-            if keep_Q_matrix_in_memory:
-                Q[j, :] = q_list[j]
-            else:
-                if not j == 0:
-                    q_re_old = q_re
-                q_re = y / gamma[j]
-                Q[:, j] = q_re
-                Hq = Hv(w, X, Y, q_re, **kwargs)  # matrix free
-
-                if j == 0:
-                    y = Hq - delta[j] * q_re
-                elif not j == k:
-                    y = Hq - delta[j] * q_re - gamma[j] * q_re_old
-
-        s = np.dot(u, Q)
-        del Q
-        return (s, lambda_k)
+    # elif subproblem_solver == 'lanczos':
+    #     y = grad
+    #     grad_norm = np.linalg.norm(grad)
+    #     gamma_k_next = grad_norm
+    #     delta = []
+    #     gamma = []  # save for cheaper reconstruction of Q
+    #
+    #     dimensionality = len(w)
+    #     if keep_Q_matrix_in_memory:
+    #         q_list = []
+    #
+    #     k = 0
+    #     T = np.zeros((1, 1))  # Building up tri-diagonal matrix T
+    #
+    #     while True:
+    #         if gamma_k_next == 0:  # From T 7.5.16 u_k was the minimizer of m_k. But it was not accepted. Thus we have to be in the hard case.
+    #             H = hessian(w, X, Y, **kwargs)
+    #             (s, lambda_k) = exact_ARC_suproblem_solver(grad, H, sigma, exact_tol, successful_flag, lambda_k)
+    #             return (s, lambda_k)
+    #
+    #         # a) create g
+    #         e_1 = np.zeros(k + 1)
+    #         e_1[0] = 1.0
+    #         g_lanczos = grad_norm * e_1
+    #         # b) generate H
+    #         gamma_k = gamma_k_next
+    #         gamma.append(gamma_k)
+    #
+    #         if not k == 0:
+    #             q_old = q
+    #         q = y / gamma_k
+    #
+    #         if keep_Q_matrix_in_memory:
+    #             q_list.append(q)
+    #
+    #         Hq = Hv(w, X, Y, q, **kwargs)  # matrix free
+    #         delta_k = np.dot(q, Hq)
+    #         delta.append(delta_k)
+    #         T_new = np.zeros((k + 1, k + 1))
+    #         if k == 0:
+    #             T[k, k] = delta_k
+    #             y = Hq - delta_k * q
+    #         else:
+    #             T_new[0:k, 0:k] = T
+    #             T_new[k, k] = delta_k
+    #             T_new[k - 1, k] = gamma_k
+    #             T_new[k, k - 1] = gamma_k
+    #             T = T_new
+    #             y = Hq - delta_k * q - gamma_k * q_old
+    #
+    #         gamma_k_next = np.linalg.norm(y)
+    #         #### Solve Subproblem only in each i-th Krylov space
+    #         if k % (solve_each_i_th_krylov_space) == 0 or (k == dimensionality - 1) or gamma_k_next == 0:
+    #             (u, lambda_k) = exact_ARC_suproblem_solver(g_lanczos, T, sigma, exact_tol, successful_flag, lambda_k)
+    #             e_k = np.zeros(k + 1)
+    #             e_k[k] = 1.0
+    #             if np.linalg.norm(y) * abs(np.dot(u, e_k)) < min(krylov_tol,
+    #                                                              np.linalg.norm(u) / max(1, sigma)) * grad_norm:
+    #                 break
+    #
+    #         if k == dimensionality - 1:
+    #             print('Krylov dimensionality reach full space!')
+    #             break
+    #
+    #         successful_flag = False
+    #
+    #         k = k + 1
+    #
+    #     # Recover Q to compute s
+    #     n = np.size(grad)
+    #     Q = np.zeros((k + 1, n))  # <--------- since numpy is ROW MAJOR its faster to fill the transpose of Q
+    #     y = grad
+    #
+    #     for j in range(0, k + 1):
+    #         if keep_Q_matrix_in_memory:
+    #             Q[j, :] = q_list[j]
+    #         else:
+    #             if not j == 0:
+    #                 q_re_old = q_re
+    #             q_re = y / gamma[j]
+    #             Q[:, j] = q_re
+    #             Hq = Hv(w, X, Y, q_re, **kwargs)  # matrix free
+    #
+    #             if j == 0:
+    #                 y = Hq - delta[j] * q_re
+    #             elif not j == k:
+    #                 y = Hq - delta[j] * q_re - gamma[j] * q_re_old
+    #
+    #     s = np.dot(u, Q)
+    #     del Q
+    #     return (s, lambda_k)
     else:
         raise ValueError('solver unknown')
 

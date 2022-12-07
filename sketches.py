@@ -9,6 +9,30 @@ from time import time
 
 torch.set_default_dtype(torch.float64)
 
+# Gongyu's implementation of leverage score sampling (as sketch)
+def sampling(s, probs, data):
+  n, d = data.shape
+  idx = np.random.choice(n, size=s, p=probs)
+  weights = np.tile(probs[idx] ** -0.5, reps=(d, 1))/ np.sqrt(s)
+  subsampled = data[idx,:] * weights.T
+  return subsampled
+  # S = np.zeros((s, n))
+  # S[np.arange(s), idx] = 1.
+  # # print(f'S has shape {S.shape}')
+  # return S
+
+def sqrn_sampling(matrix, s, ):
+  # n, d = matrix.shape
+  probs = np.linalg.norm(matrix, axis=1) ** 2 / np.linalg.norm(matrix) ** 2
+  return sampling(s, probs, matrix)
+
+def lvrg_sampling(matrix, s, ):
+  # rank = np.linalg.matrix_rank(data)
+  lev_scores = lev_approx(torch.from_numpy(matrix), alpha=5)
+  probs = lev_scores / lev_scores.sum()
+  return sampling(s, probs, matrix)
+
+###
 
 def _hadamard(matrix):
     n = matrix.shape[0]

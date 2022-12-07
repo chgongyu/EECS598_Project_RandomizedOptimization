@@ -67,7 +67,7 @@ def gen_sketch_mat(m, n, method):
 
 def NS(w, loss, gradient, Hv=None, hessian=None, X=None, Y=None, opt=None, **kwargs):
     """
-    Minimize a continous, unconstrained function using the Adaptive Cubic Regularization method.
+    Minimize a continous, unconstrained function using the Sketched Newton.
 
     References
     ----------
