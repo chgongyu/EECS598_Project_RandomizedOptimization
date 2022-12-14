@@ -65,7 +65,7 @@ def gen_sketch_mat(m, n, method):
         raise ValueError('Unrecognized sketch type: ' + method)
     return S
 
-def NS(w, loss, gradient, Hv=None, hessian=None, X=None, Y=None, opt=None, **kwargs):
+def NS(w, loss, gradient, Hreg=None, hessian=None, X=None, Y=None, opt=None, **kwargs):
     """
     Minimize a continous, unconstrained function using the Sketched Newton.
 
@@ -104,7 +104,9 @@ def NS(w, loss, gradient, Hv=None, hessian=None, X=None, Y=None, opt=None, **kwa
         n = X.shape[0]
         d = X.shape[1]
 
+
         # Basics
+    damped = opt.get('damped', 0)
     sketch_size = opt.get('sketch_size', int(np.sqrt(X.shape[0])))
     sketch_type = opt.get('sketch_type', sparse_rademacher)
     alpha = opt.get('alpha', 1e-3)
@@ -134,9 +136,16 @@ def NS(w, loss, gradient, Hv=None, hessian=None, X=None, Y=None, opt=None, **kwa
     for i in range(n_iterations):
 
         #### I: Sketching #####
-        B = logis_sketched_hessian_sqrt(X, w)
-
-        sqrt_hessian = sketch_type(B, sketch_size)
+        if sketch_size < n:
+            B = logis_sketched_hessian_sqrt(X, w)
+            sqrt_hessian = sketch_type(B, sketch_size)
+            H = sqrt_hessian.T @ sqrt_hessian
+            if Hreg is not None:
+                H += Hreg(w,X, Y, **kwargs)
+        else:
+            if i == 0:
+                print('Yes!!!!!')
+            H =hessian(w,X, Y, **kwargs)
 
         # S = gen_sketch_mat(sketch_size, n, 'Gaussian')
         # S = np.eye(n)
@@ -150,13 +159,17 @@ def NS(w, loss, gradient, Hv=None, hessian=None, X=None, Y=None, opt=None, **kwa
             break
 
         # b) call subproblem solver
-        H = sqrt_hessian.T @ sqrt_hessian + alpha*np.eye(d)
+
         # hessian = H + opt['alpha'] * np.eye(d)
         # H = hessian(w, X, Y, **kwargs)
 
         # print(f'{np.linalg.norm(H+ alpha * np.eye(d) - H)}')
         v = - np.linalg.solve(H, grad)
-        mu = line_search(w, v, grad, loss, X, Y)
+        if damped:
+            hnorm = damped * np.sqrt(np.dot(grad, -v))
+            mu = (-1 + np.sqrt(1 + 2 * hnorm)) / hnorm
+        else:
+            mu = line_search(w, v, grad, loss, X, Y)
 
         s = mu * v
         sn = np.linalg.norm(s)
@@ -189,3 +202,10 @@ def NS(w, loss, gradient, Hv=None, hessian=None, X=None, Y=None, opt=None, **kwa
     return w, timings_collector, loss_collector, samples_collector
 
 
+def NEWTON(w, loss, gradient, Hreg=None, hessian=None, X=None, Y=None, opt=None, **kwargs):
+    size_temp = opt['sketch_size']
+    opt['sketch_size'] = X.shape[0]
+    (w, _timing, _loss, _samples) = NS(w, loss, gradient,
+            Hreg, hessian, X=X, Y=Y, opt=opt, **kwargs)
+    opt['sketch_size'] = size_temp
+    return (w, _timing, _loss, _samples)

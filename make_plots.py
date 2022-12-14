@@ -46,7 +46,7 @@ def two_d_plot_time(list_loss, list_x, list_params, dataset_name, n, d, log_scal
         plt.xlim(x_limits)
     plt.title(str(dataset_name) + ' (n=' + str(n) + ', d=' + str(d) + ')', fontsize=18)
     plt.show
-    fig.savefig('time.png')
+    # fig.savefig('time.png')
 
 
 def two_d_plot_iterations(list_loss, list_x, list_params, dataset_name, n, d, log_scale, x_limits=None):
@@ -78,7 +78,7 @@ def two_d_plot_iterations(list_loss, list_x, list_params, dataset_name, n, d, lo
         plt.xlim(x_limits)
     plt.title(str(dataset_name) + ' (n=' + str(n) + ', d=' + str(d) + ')', fontsize=18)
     plt.show
-    fig.savefig('iter.png')
+    # fig.savefig('iter.png')
 
 
 def two_d_plot_epochs(list_loss, list_samples, list_params, dataset_name, n, d, log_scale, x_limits=None):

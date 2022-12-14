@@ -17,6 +17,15 @@ from scipy import linalg
 from sklearn.utils.extmath import randomized_svd
 
 # Return the loss as a numpy array
+def regularizer_convex_hessian(w, X, Y, alpha=1e-3, beta=1):
+    n, d = X.shape
+    H = alpha * np.eye(d, d)
+    return H
+
+def regularizer_nonconvex_hessian(w, X, Y, alpha=1e-3, beta=1):
+    n, d = X.shape
+    H = alpha * np.eye(d, d) * np.multiply(2 * beta - 6 * beta ** 2 * w ** 2, (beta * w ** 2 + 1) ** (-3))
+    return H
 
 def square_loss(w, X , Y, alpha=1e-3):
     n = X.shape[0]
@@ -139,6 +148,7 @@ def square_loss_hessian( w, X, Y, alpha=1e-3):
     d = X.shape[1]
     H = np.dot(X.T, X) / n + (alpha * np.eye(d, d))
     return H
+
 def logistic_loss_hessian( w, X, Y, alpha=1e-3):
     n = X.shape[0]
     d = X.shape[1]
@@ -150,6 +160,8 @@ def logistic_loss_hessian( w, X, Y, alpha=1e-3):
     return H 
 
 def logistic_loss_nonconvex_hessian( w, X, Y, alpha=1e-3,beta=1):
+    n = X.shape[0]
+    d = X.shape[1]
     z= X.dot(w)
     q=phi(z)
     h= q*(1-phi(z))

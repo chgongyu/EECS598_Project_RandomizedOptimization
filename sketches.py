@@ -28,7 +28,7 @@ def sqrn_sampling(matrix, s, ):
 
 def lvrg_sampling(matrix, s, ):
   # rank = np.linalg.matrix_rank(data)
-  lev_scores = lev_approx(torch.from_numpy(matrix), alpha=5)
+  lev_scores = lev_approx(matrix, alpha=5)
   probs = lev_scores / lev_scores.sum()
   return sampling(s, probs, matrix)
 
@@ -150,7 +150,7 @@ def srht(matrix, sketch_size, nnz=None):
 
 
 def lev_approx(matrix, alpha=10):
-    # matrix = torch.from_numpy(matrix)
+    matrix = torch.from_numpy(matrix)
     n, d = matrix.shape
     m = int(alpha * d)
     sa = sjlt(matrix, m)
@@ -161,7 +161,29 @@ def lev_approx(matrix, alpha=10):
 
 
 if __name__ == "__main__":
-    print(sparse_rademacher(np.random.rand(10, 4), 2).shape)
+    # print(sparse_rademacher(np.random.rand(10, 4), 2).shape)
+    from sklearn.datasets import load_svmlight_file
+    import matplotlib.pyplot as plt
+    X, Y = load_svmlight_file('data/a9a')
+    X = X.toarray()
+    lev_scores = lev_approx(X)
+    idx = np.logical_or((lev_scores > np.percentile(lev_scores, 98)), (lev_scores < np.percentile(lev_scores, 50)))
+    large = 75
+    small = 30
+    lev_large = sum((lev_scores > np.percentile(lev_scores, large)))
+    lev_small = sum((lev_scores < np.percentile(lev_scores, small)))
+    # print()
+    # print(sum((lev_scores > np.percentile(lev_scores, small))))
+    print(lev_large / (lev_large + lev_small))
+    print(lev_large / X.shape[0])
+    # print(sum(np.logical_or((lev_scores > np.percentile(lev_scores, 80)), (lev_scores < np.percentile(lev_scores, 25)))))
+    fig, ax = plt.subplots(figsize=(10, 7))
+    ax.hist(np.compress(idx, lev_scores, axis=0))
+    plt.show()
+    # idx =
+    # test_X =np.compress(bool_idx_Hessian,X,axis=0)
+        #     _Y=np.compress(bool_idx_Hessian,Y,axis=0)
+
 
 '''
 def _srht(indices, v):
