@@ -225,8 +225,9 @@ def subsampled_regnewton(w, loss, gradient, Hv=None, hessian=None, X=None, Y=Non
         time4 = datetime.now()
         n_samples_seen += n_samples_per_step
         _timing=timing
-        timing += (time3 - time0).total_seconds()
-        
+        # timing += (time3 - time0).total_seconds()
+        timing = (datetime.now() - start).total_seconds()
+
         print ('Iteration ' + str(i) + ': loss = ' + str(_loss) + ' norm_grad = ' + str(
             grad_norm), 'time= ', round(timing-_timing,5), 'penalty=', sigma, 'stepnorm=', sn, 'Samples Hessian=', sample_size_Hessian,'samples Gradient=', sample_size_gradient,'H', H, "\n")
         print('grad and hess time: {}, hess lip time: {}, solver time: {}, loss time: {}'.format((time1 - time0).total_seconds(), (time2 - time1).total_seconds(), (time3 - time2).total_seconds(), (time4 - time3).total_seconds()))

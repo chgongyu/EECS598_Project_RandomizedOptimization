@@ -164,21 +164,43 @@ if __name__ == "__main__":
     # print(sparse_rademacher(np.random.rand(10, 4), 2).shape)
     from sklearn.datasets import load_svmlight_file
     import matplotlib.pyplot as plt
-    X, Y = load_svmlight_file('data/a9a')
-    X = X.toarray()
+    # X, Y = load_svmlight_file('data/a9a')
+    # X = X.toarray()
+    # lev_scores = lev_approx(X)
+    # idx = np.logical_or((lev_scores > np.percentile(lev_scores, 98)), (lev_scores < np.percentile(lev_scores, 50)))
+    # large = 75
+    # small = 30
+    # lev_large = sum((lev_scores > np.percentile(lev_scores, large)))
+    # lev_small = sum((lev_scores < np.percentile(lev_scores, small)))
+    # # print()
+    # # print(sum((lev_scores > np.percentile(lev_scores, small))))
+    # print(lev_large / (lev_large + lev_small))
+    # print(lev_large / X.shape[0])
+    # # print(sum(np.logical_or((lev_scores > np.percentile(lev_scores, 80)), (lev_scores < np.percentile(lev_scores, 25)))))
+
+    n = 10000
+    d = 200
+    row, col = np.indices((d, d))
+
+    @np.vectorize
+    def sigma_val(i, j, rho=0.9):
+      return 2 * rho ** np.abs(i - j)
+    # Sigma = sigma_val(row, col)
+
+    X0 = np.random.multivariate_normal(np.zeros(d), sigma_val(row, col, rho=0.6), size=n)
+    X1 = np.random.multivariate_normal(np.ones(d), sigma_val(row, col, rho=0.9), size=n)
+    X2 = np.random.multivariate_normal(-np.ones(d), sigma_val(row, col, rho=0.9), size=n)
+    X = 0.66 * X0 + 0.33 * X1 + 0.33 * X2
     lev_scores = lev_approx(X)
-    idx = np.logical_or((lev_scores > np.percentile(lev_scores, 98)), (lev_scores < np.percentile(lev_scores, 50)))
     large = 75
-    small = 30
+    # small = 30
     lev_large = sum((lev_scores > np.percentile(lev_scores, large)))
-    lev_small = sum((lev_scores < np.percentile(lev_scores, small)))
-    # print()
-    # print(sum((lev_scores > np.percentile(lev_scores, small))))
-    print(lev_large / (lev_large + lev_small))
-    print(lev_large / X.shape[0])
-    # print(sum(np.logical_or((lev_scores > np.percentile(lev_scores, 80)), (lev_scores < np.percentile(lev_scores, 25)))))
+    # lev_small = sum((lev_scores < np.percentile(lev_scores, small)))
+    # # print()
+    # # print(sum((lev_scores > np.percentile(lev_scores, small))))
+    print(lev_large / n)
     fig, ax = plt.subplots(figsize=(10, 7))
-    ax.hist(np.compress(idx, lev_scores, axis=0))
+    ax.hist(lev_scores)
     plt.show()
     # idx =
     # test_X =np.compress(bool_idx_Hessian,X,axis=0)
