@@ -73,8 +73,8 @@ def subsampled_regnewton(w, loss, gradient, Hv=None, hessian=None, X=None, Y=Non
     if gradient_sampling_flag==True or Hessian_sampling_flag==True:
         assert (X is not None and Y is not None), "Subsampling is only possible if data is passsed, i.e. X and Y may not be none"
 
-    initial_sample_size_Hessian=opt.get('srn_initial_sample_size_Hessian',0.05)
-    initial_sample_size_gradient=opt.get('srn_initial_sample_size_gradient',0.05)
+    initial_sample_size_Hessian=opt.get('initial_sample_size_Hessian',0.05)
+    initial_sample_size_gradient=opt.get('initial_sample_size_gradient',0.05)
     sample_scaling_Hessian=opt.get('sample_scaling_Hessian',1)
     sample_scaling_gradient=opt.get('sample_scaling_gradient',1)
     unsuccessful_sample_scaling=opt.get('unsuccessful_sample_scaling',1.25)
@@ -136,14 +136,14 @@ def subsampled_regnewton(w, loss, gradient, Hv=None, hessian=None, X=None, Y=Non
             else:
                 #adjust sampling constant c such that the first step would have given a sample size of initial_sample_size
                 if i==1:
-                    c_Hessian=(initial_sample_size_Hessian*n*sn)/log(d)
-                    c_gradient=(initial_sample_size_gradient*n*(sn**3))/log(d)
+                    c_Hessian=(initial_sample_size_Hessian*n*khgk)/log(d)
+                    c_gradient=(initial_sample_size_gradient*n*((sn**2)*khgk))/log(d)
                 if successful_flag==False:
                     sample_size_Hessian=Hessian_sampling_flag*min(n,int(sample_size_Hessian*unsuccessful_sample_scaling)) + (1-Hessian_sampling_flag)*n
                     sample_size_gradient=gradient_sampling_flag*min(n,int(sample_size_gradient*unsuccessful_sample_scaling)) +(1-gradient_sampling_flag)*n
                 else:
                     sample_size_Hessian=Hessian_sampling_flag*min(n,int(max((c_Hessian*log(d)/sn*sample_scaling_Hessian),initial_sample_size_Hessian*n))) + (1-Hessian_sampling_flag)*n            
-                    sample_size_gradient=gradient_sampling_flag*min(n,int(max((c_gradient*log(d)/((sn**3))*sample_scaling_gradient),initial_sample_size_gradient*n))) + (1-gradient_sampling_flag)*n
+                    sample_size_gradient=gradient_sampling_flag*min(n,int(max((c_gradient*log(d)/(((sn**2)*khgk))*sample_scaling_gradient),initial_sample_size_gradient*n))) + (1-gradient_sampling_flag)*n
             # else:
             #     #adjust sampling constant c such that the first step would have given a sample size of initial_sample_size
             #     if i==1:
