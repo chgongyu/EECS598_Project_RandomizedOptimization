@@ -1,4 +1,4 @@
-# subsampled_cubic_regularization
+# Sketched and Sub-sampled Second-Order Optimization Methods
 Source code for EECS 598 Course Project by Gongyu Chen, Boxuan Chang, Geyu Liang, and Jiahao Shi.
 
 Adapted from publicly available code for "Sub-sampled Cubic Regularization for Non-convex Optimization", JM Kohler, A Lucchi, ICML 2017. https://arxiv.org/abs/1705.05933
