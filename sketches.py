@@ -78,13 +78,13 @@ def gaussian(matrix, sketch_size, nnz=None):
 
 
 def sjlt(matrix, sketch_size, nnz=None):
-    # matrix = torch.from_numpy(matrix)
+    matrix = torch.from_numpy(matrix)
     n, d = matrix.shape
     indices = np.vstack([np.random.choice(sketch_size, n).reshape((1, -1)), np.arange(n)])
     values = np.random.choice(np.array([-1, 1], dtype=np.float64), size=n)
     S = torch.sparse_coo_tensor(indices, values, (sketch_size, n)).to(matrix.device)
     sa = S @ matrix
-    return sa
+    return sa.numpy()
 
 
 def sparse_rademacher(matrix, sketch_size, nnz=None):
@@ -103,7 +103,7 @@ def sparse_rademacher(matrix, sketch_size, nnz=None):
 def less(matrix, sketch_size, lev_scores=False, nnz=None):
     matrix = torch.from_numpy(matrix)
     if not lev_scores:
-        return sparse_rademacher(hadamard(matrix), sketch_size, nnz)
+        return sparse_rademacher(hadamard(matrix).numpy(), sketch_size, nnz)
     else:
         n, d = matrix.shape
         lev_scores = lev_approx(matrix, alpha=5)
@@ -150,12 +150,12 @@ def srht(matrix, sketch_size, nnz=None):
 
 
 def lev_approx(matrix, alpha=10):
-    matrix = torch.from_numpy(matrix)
+    # matrix = torch.from_numpy(matrix)
     n, d = matrix.shape
     m = int(alpha * d)
     sa = sjlt(matrix, m)
-    _, sig_vec, v_mat = torch.svd(sa)
-    y_mat = matrix @ v_mat.T / sig_vec.reshape((1, -1))
+    _, sig_vec, v_mat = torch.svd(torch.from_numpy(sa))
+    y_mat = torch.from_numpy(matrix) @ v_mat.T / sig_vec.reshape((1, -1))
     lev_vec = torch.sum(y_mat ** 2, axis=1)
     return lev_vec.cpu().numpy()
 
@@ -179,7 +179,7 @@ if __name__ == "__main__":
     # # print(sum(np.logical_or((lev_scores > np.percentile(lev_scores, 80)), (lev_scores < np.percentile(lev_scores, 25)))))
 
     n = 10000
-    d = 200
+    d = 100
     row, col = np.indices((d, d))
 
     @np.vectorize
@@ -187,18 +187,19 @@ if __name__ == "__main__":
       return 2 * rho ** np.abs(i - j)
     # Sigma = sigma_val(row, col)
 
-    X0 = np.random.multivariate_normal(np.zeros(d), sigma_val(row, col, rho=0.6), size=n)
+    X0 = np.random.multivariate_normal(np.zeros(d), sigma_val(row, col, rho=0.3), size=n)
     X1 = np.random.multivariate_normal(np.ones(d), sigma_val(row, col, rho=0.9), size=n)
     X2 = np.random.multivariate_normal(-np.ones(d), sigma_val(row, col, rho=0.9), size=n)
-    X = 0.66 * X0 + 0.33 * X1 + 0.33 * X2
+    X = 0.33 * X0 + 0.66 * X1 + 0.01 * X2
     lev_scores = lev_approx(X)
-    large = 75
-    # small = 30
-    lev_large = sum((lev_scores > np.percentile(lev_scores, large)))
+    # large = 75
+    # # small = 30
+    # lev_large = sum((lev_scores > np.percentile(lev_scores, large)))
     # lev_small = sum((lev_scores < np.percentile(lev_scores, small)))
     # # print()
     # # print(sum((lev_scores > np.percentile(lev_scores, small))))
-    print(lev_large / n)
+    print(sum(lev_scores))
+    print(np.var(lev_scores))
     fig, ax = plt.subplots(figsize=(10, 7))
     ax.hist(lev_scores)
     plt.show()

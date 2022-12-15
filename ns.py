@@ -111,7 +111,7 @@ def NS(w, loss, gradient, Hreg=None, hessian=None, X=None, Y=None, opt=None, **k
     sketch_type = opt.get('sketch_type', sparse_rademacher)
     alpha = opt.get('alpha', 1e-3)
 
-    grad_tol = opt.get('grad_tol', 1e-6)
+    grad_tol = opt.get('grad_tol', 1e-9)
     n_iterations = opt.get('n_iterations', 100)
 
     ### -> no opt call after here!!
@@ -143,8 +143,6 @@ def NS(w, loss, gradient, Hreg=None, hessian=None, X=None, Y=None, opt=None, **k
             if Hreg is not None:
                 H += Hreg(w,X, Y, **kwargs)
         else:
-            if i == 0:
-                print('Yes!!!!!')
             H =hessian(w,X, Y, **kwargs)
 
         # S = gen_sketch_mat(sketch_size, n, 'Gaussian')

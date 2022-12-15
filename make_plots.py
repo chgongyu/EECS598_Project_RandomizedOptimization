@@ -17,18 +17,18 @@ def preprocess(list_loss):
         min_value = min(list_loss[k]) if (min(list_loss[k]) <= min_value) else min_value
 
     # subtract min value and add epsilon
-    eps = min_value * 1e-6
+    eps = min_value * 1e-3
     for k in range(len(list_loss)):
         list_loss[k] = [i - min_value + eps for i in list_loss[k]]
     return list_loss
 
 
-def two_d_plot_time(list_loss, list_x, list_params, dataset_name, n, d, log_scale, x_limits=None):
+def two_d_plot_time(list_loss, list_x, list_params, dataset_name, n, d, log_scale, x_limits=None, y_limits=None):
     list_loss = preprocess(list_loss)
     colors = ['#1B2631', '#C0392B', '#9B59B6', '#2980B9', '#1E8449', '#27AE60', '#E67E22', '#95A5A6', '#FF97F2',
               '#34495E']
-    linestyles = ['-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-']
-    fig = plt.figure(figsize=(13.33,7.5), dpi=96)
+    linestyles = ['-.', '--', ':', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-']
+    fig = plt.figure(figsize=(7.5,7.5), dpi=96)
 
 
     for i in range(len(list_loss)):
@@ -38,6 +38,8 @@ def two_d_plot_time(list_loss, list_x, list_params, dataset_name, n, d, log_scal
     if log_scale == True:
         plt.yscale('log')
         plt.ylabel('$\log(f-f^*)$', fontsize=18)
+        if not y_limits == None:
+            plt.ylim(y_limits)
     else:
         plt.yscale('linear')
         plt.ylabel('$(f-f^*)$')
@@ -46,15 +48,15 @@ def two_d_plot_time(list_loss, list_x, list_params, dataset_name, n, d, log_scal
         plt.xlim(x_limits)
     plt.title(str(dataset_name) + ' (n=' + str(n) + ', d=' + str(d) + ')', fontsize=18)
     plt.show
-    # fig.savefig('time.png')
+    fig.savefig(f'{dataset_name}_time.png')
 
 
-def two_d_plot_iterations(list_loss, list_x, list_params, dataset_name, n, d, log_scale, x_limits=None):
+def two_d_plot_iterations(list_loss, list_x, list_params, dataset_name, n, d, log_scale, x_limits=None, y_limits=None):
     colors = ['#1B2631', '#C0392B', '#9B59B6', '#2980B9', '#1E8449', '#27AE60', '#E67E22', '#95A5A6', '#FF97F2',
               '#34495E']
-    linestyles = ['-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-']
+    linestyles = ['-.', '--', ':', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-']
 
-    fig = plt.figure(figsize=(13.33,7.5), dpi=96)
+    fig = plt.figure(figsize=(7.5,7.5), dpi=96)
 
     for i in range(len(list_loss)):
         _x = []
@@ -69,6 +71,8 @@ def two_d_plot_iterations(list_loss, list_x, list_params, dataset_name, n, d, lo
     if log_scale == True:
         plt.yscale('log')
         plt.ylabel('$\log(f-f^*)$', fontsize=18)
+        if not y_limits == None:
+            plt.ylim(y_limits)
     else:
         plt.yscale('linear')
         plt.ylabel('$(f-f^*)$')
@@ -78,7 +82,7 @@ def two_d_plot_iterations(list_loss, list_x, list_params, dataset_name, n, d, lo
         plt.xlim(x_limits)
     plt.title(str(dataset_name) + ' (n=' + str(n) + ', d=' + str(d) + ')', fontsize=18)
     plt.show
-    # fig.savefig('iter.png')
+    fig.savefig(f'{dataset_name}_iter.png')
 
 
 def two_d_plot_epochs(list_loss, list_samples, list_params, dataset_name, n, d, log_scale, x_limits=None):

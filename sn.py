@@ -10,7 +10,7 @@ import numpy as np
 from sketches import gaussian, srht, less, sparse_rademacher, rrs, lvrg_sampling, sqrn_sampling
 from sqrt_hessian import logis_sketched_hessian_sqrt
 
-def SkCR(w, loss, gradient, Hv=None, hessian=None, X=None, Y=None, opt=None, **kwargs):
+def SkCR(w, loss, gradient, Hv=None, Hreg=None, hessian=None, X=None, Y=None, opt=None, **kwargs):
     """
     Minimize a continous, unconstrained function using the Sketched cubic regularization.
 
@@ -179,10 +179,17 @@ def SkCR(w, loss, gradient, Hv=None, hessian=None, X=None, Y=None, opt=None, **k
 
         # n_samples_per_step=sample_size_Hessian+sample_size_gradient
 
-        sketch_size = sample_size_Hessian
-        B = logis_sketched_hessian_sqrt(X, w)
-        sqrt_hessian = sketch_type(B, sketch_size)
-
+        # sketch_size = sample_size_Hessian
+        # B = logis_sketched_hessian_sqrt(X, w)
+        # sqrt_hessian = sketch_type(B, sketch_size)
+        if sketch_size < n:
+            B = logis_sketched_hessian_sqrt(X, w)
+            sqrt_hessian = sketch_type(B, sketch_size)
+            H = sqrt_hessian.T @ sqrt_hessian
+            if Hreg is not None:
+                H += Hreg(w,X, Y, **kwargs)
+        else:
+            H =hessian(w,X, Y, **kwargs)
 
         # S = gen_sketch_mat(sketch_size, n, 'Gaussian')
         # S = np.eye(n)
@@ -196,7 +203,9 @@ def SkCR(w, loss, gradient, Hv=None, hessian=None, X=None, Y=None, opt=None, **k
             break
 
         # b) call subproblem solver
-        H = sqrt_hessian.T @ sqrt_hessian + alpha * np.eye(d)
+        # H = sqrt_hessian.T @ sqrt_hessian
+        # if Hreg is not None:
+        #     H += Hreg(w, X, Y, **kwargs)
 
         # b) call subproblem solver
         (s, lambda_k) = solve_ARC_subproblem(grad, H, sigma, X, Y, w, successful_flag, lambda_k,
