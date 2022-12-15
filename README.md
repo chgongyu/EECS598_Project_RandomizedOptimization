@@ -20,3 +20,5 @@ d) The **Newton Sketch (NS)** method presented in Pilanci and Wainwright, 2017
 e) The **Sketched Cubic Regularization (SkCR)** method discussed in our report
 
 f) The **Sketched Affine-Invariant Cubic Newton (SkAICN)** method discussed in our report 
+
+g) The **Subsampled adaptive Regularized Newton (SRN)** method discussed in our report
